@@ -1,0 +1,192 @@
+### ============================================================
+### TiF file — LLM inference workload (llama.cpp, CPU-only)
+### Aligned to Paper 1 scope: memory contention / tail-latency stability
+### under CPU inference. NUMA and quantization tuning intentionally
+### absent — out of scope per paper1_scope.
+### ============================================================
+
+[meta]
+name        = "llama3-8b-q4-controller-baseline"
+description = "Reference .tif for the closed-loop CPU inference controller experiments"
+
+# ------------------------------------------------------------
+# WORKLOAD
+# ------------------------------------------------------------
+[workload]
+type       = "model"
+model      = "llama3:8b-q4"       # resolved via internal model store, checksum-verified on pull
+engine     = "llama.cpp"
+binary     = "llama-cli"          # or "llama-server" if you want the /completion timings API instead of stdout parsing
+ctx_size   = 4096
+threads    = 4                    # passed to llama.cpp's -t flag; also cross-checked against cpu.affinity length
+gpu_layers = 0                    # explicitly 0 — CPU-only per scope; field kept so misconfig is loud, not silent
+batch_size = 512                  # prefill batch size, exposed as an experiment axis per ProfStat "across tokens"
+prompt_file = "./prompts/bench_512tok.txt"
+max_tokens  = 450                 # matches paper's Figure 9 decode-iteration count for comparable runs
+
+# ------------------------------------------------------------
+# NAMESPACES — same isolation as container mode, PID/UTS/mount only.
+# Network namespace off: model workloads don't need it and it adds
+# nothing but confound risk to the controller experiments.
+# ------------------------------------------------------------
+[namespaces]
+uts   = true
+pid   = true
+mount = true
+ipc   = false
+net   = false
+user  = false
+
+# ------------------------------------------------------------
+# RESOURCES
+# ------------------------------------------------------------
+[resources]
+memory_mb = 8192
+swap_mb   = 0
+max_procs = 200          # llama.cpp spawns worker threads under one process; leave headroom above `threads`
+nofile    = 4096          # gguf file + mmap handles
+core_dump = false
+
+# ------------------------------------------------------------
+# CPU — this section is the primary experimental variable in paper1.
+# Every field here maps directly to a metric in the Scheduling/Affinity
+# results table: "Core-type residency: % time on P vs E cores".
+# ------------------------------------------------------------
+[cpu]
+cores      = 4
+affinity   = [0, 1, 2, 3]        # -> cpuset.cpus; MUST match physical core IDs of the intended core_type
+core_type  = "p"                  # "p" | "e" | "mixed" — on Intel 14th-gen (primary platform), resolved via
+                                   # /sys/devices/system/cpu/cpuN/topology/core_type ("Core"/"Atom" strings)
+numa_nodes = []                    # left empty — NUMA explicitly out of scope; secondary platform (Ryzen) has
+                                    # none anyway, primary platform is single-die so this is a no-op there too
+weight     = 100
+quota_us   = 400000                # 4 cores worth; tie this to len(affinity) programmatically in config validation
+period_us  = 100000
+governor   = "performance"          # fixed for all controller-experiment runs — variance from frequency scaling
+                                     # would otherwise contaminate the tail-latency measurements you're reporting
+turbo      = false                   # disabled for the same reason — matches paper1's reproducibility requirement
+smt        = "unchanged"
+
+# ------------------------------------------------------------
+# MEMORY — decode phase is memory/bandwidth-bound per ProfInfer's own
+# findings (Fig 9, 11); this is the section most directly tied to the
+# paper's "memory contention causes unstable latency" problem statement.
+# ------------------------------------------------------------
+[memory]
+max_mb  = 8192
+high_mb = 7168             # soft throttle ~87.5% of max — gives the controller a PSI signal before an OOM kill
+swap_mb = 0
+mlock   = true              # pin gguf-mapped weights resident; prevents swap-induced decode-latency spikes,
+                              # directly relevant to the tail-latency (p99) metric this paper reports
+thp     = "unchanged"        # leave THP alone unless you're specifically ablating it — undocumented interaction
+                              # with mmap'd model weights, worth its own controlled experiment rather than a default
+
+# ------------------------------------------------------------
+# I/O — relevant if the model doesn't fully fit in memory_mb and mmap
+# has to page from disk (see ProfInfer's MoE expert-eviction finding).
+# For a dense 8B-q4 model at 8192MB budget this should stay unconstrained.
+# ------------------------------------------------------------
+[io]
+weight = 100
+# no [[io.limits]] entries — intentionally unconstrained for baseline runs;
+# add a device entry here only when specifically testing I/O contention as a confound
+
+# ------------------------------------------------------------
+# CACHE — hardware-gated (Intel CAT/MBA via resctrl). Out of scope for
+# the controller's *input* per paper1 ("no hooks into ... internals",
+# telemetry-only for cache — see [telemetry.pmc] below), but left here
+# as a manual knob for isolating cache-partitioning as a confound.
+# ------------------------------------------------------------
+[cache]
+l3_partition = ""       # empty = don't touch resctrl; paper1's controller does not act on this
+mba_percent  = 100
+
+# ------------------------------------------------------------
+# TELEMETRY — general profiler (Profiler A), always-on, free.
+# Same mechanism set as general.tif.
+# ------------------------------------------------------------
+[telemetry]
+enabled     = true
+profiler    = "profinfer"          # switches on the LLM-specific collector below, in addition to general metrics
+interval_ms = 1000
+export      = "sqlite"              # sqlite over csv here — paper1 needs joined queries across telemetry + controller logs
+output_dir  = "/var/lib/tif/telemetry/llama3-8b-q4-controller-baseline/"
+
+  [telemetry.metrics]               # general profiler, kept on — cheap, and paper1 reports CPU util + PSI directly
+  cpu_percent      = true
+  rss              = true
+  memory_peak      = true
+  memory_events    = true
+  pids_current     = true
+  ctx_switches     = true            # -> paper1 metric: "Context switches/sec (inference TIDs only)" — filter by TID in post-processing
+  migrations       = true             # -> paper1 metric: "CPU migrations/sec"
+  runqueue_latency = true
+  psi_cpu          = true             # -> paper1 metric: PSI memory pressure section pairs with psi_memory; psi_cpu kept for controller input
+  psi_memory       = true             # -> paper1 metric: "PSI memory pressure" (primary controller trigger signal)
+  psi_io           = true
+  io_stat          = true
+  major_faults     = true             # -> relevant to KV-cache growth / paging behavior over long contexts
+
+  # --------------------------------------------------------
+  # PMC — hardware performance counters, per ProfInfer Table 3.
+  # mechanism: perf_event_open(2), read per-thread, diffed across
+  # uprobe/uretprobe (or in your case, around decode-iteration boundaries
+  # parsed from llama.cpp's own timing output, since you're not hooking
+  # GGML internals per paper1's OS-level-only scope).
+  # --------------------------------------------------------
+  [telemetry.pmc]
+  enabled              = true
+  l3d_cache_refill     = true    # per-core; 64B units; -> paper1 metric "LLC miss rate (per instruction)" numerator
+  mem_access_wr        = true    # per-core; 16B units — memory write traffic, supports the "memory contention" story
+  cycles               = true     # hardware cycle counter — denominator for "per instruction" normalization
+  instructions         = true      # needed alongside cycles to compute IPC and LLC-miss-per-instruction
+  idle_backend_cycles  = true       # stalled backend cycles — ProfInfer's "backend bound" signal (Fig 11b)
+  major_page_faults    = true        # software PMC, cross-checked against telemetry.metrics.major_faults above
+
+  # --------------------------------------------------------
+  # Scheduler tracepoints — per ProfInfer Section 3.3.4.
+  # mechanism: sched_switch, sched_wakeup tracepoints, filtered
+  # to inference thread IDs only (unfiltered = unusable event volume).
+  # --------------------------------------------------------
+  [telemetry.scheduler]
+  enabled       = true
+  sched_switch  = true    # thread state transitions: running -> idle (prev_state=0) or -> runnable (prev_state=1)
+  sched_wakeup  = true    # wakeup events, thread + CPU ID logged
+  filter_scope  = "inference_tids"    # "inference_tids" | "all" — "all" will overwhelm the ring buffer on a busy host
+  core_residency = true    # derived metric from the above two: -> paper1 "% time on P vs E cores (Intel only)"
+
+  # --------------------------------------------------------
+  # LLM-level timing — parsed from llama.cpp output, NOT eBPF uprobes
+  # into GGML (paper1 is explicitly OS-level-telemetry-only, unlike
+  # ProfInfer itself). This keeps the controller runtime-agnostic.
+  # --------------------------------------------------------
+  [telemetry.inference]
+  ttft          = true      # time to first token — prefill phase latency
+  tpot          = true       # time per output token — decode phase latency, sampled every iteration
+  tokens_per_sec = true       # -> paper1 "System" metric: Throughput (tokens/sec)
+  percentiles   = [50, 90, 95, 99]   # -> paper1 "Tail latency (primary)": p50/p90/p95/p99 decode latency
+  variance      = true       # -> paper1: "Variance / CoV across repeated runs"
+
+# ------------------------------------------------------------
+# THERMAL — confound control only. Not a controller input; used to
+# exclude runs where throttling contaminates the latency measurement.
+# mechanism: /sys/class/thermal/thermal_zone*/temp, cpufreq scaling_cur_freq
+# ------------------------------------------------------------
+[telemetry.thermal]
+enabled          = true
+per_core_temp    = true
+sustained_freq   = true
+throttle_exclude = true    # if a throttle flag fires mid-run, mark the run excluded rather than silently keeping it
+
+# ------------------------------------------------------------
+# CONTROLLER — the closed loop itself. Not present in general.tif;
+# this is the actual novel component of paper1.
+# ------------------------------------------------------------
+[controller]
+enabled        = true
+mode           = "adaptive"     # "off" | "adaptive" — "off" gives you the baseline/uncontrolled runs for comparison
+decision_interval_ms = 500       # how often the controller re-evaluates telemetry and considers an action
+inputs         = ["psi_memory", "psi_cpu", "l3d_cache_refill", "runqueue_latency"]   # signals it's allowed to read
+actions        = ["reaffinitize", "adjust_threads"]    # what it's allowed to do: re-pin cores, change thread count
+action_cooldown_ms = 2000         # minimum time between actions — prevents thrash, feeds "Action count / thrash rate" metric
+log_decisions  = true              # -> paper1 "Controller" metrics: decision latency, action overhead, action count

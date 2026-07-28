@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -e
+
+defaultImage="hello-world"
+
+image="${1:-$defaultImage}"
+container="$(docker create "$image")"
+
+pdir=$(dirname "./assets/${image}.tar.gz")
+mkdir -p "$pdir"
+
+docker export "$container" -o "./assets/${image}.tar.gz" > /dev/null
+docker rm "$container" > /dev/null

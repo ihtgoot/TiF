@@ -1,0 +1,94 @@
+Name: "ubuntu-test"
+
+Mode: 1   # 0 = General, 1 = Research
+
+Control_vector:
+  - true
+  - true
+  - true
+  - false
+  - false
+  - false
+  - false
+  - false
+
+Isolation:
+
+  PID:
+    Enable: true
+    Mode: 0          # PrivatePid
+    MountProc: true
+
+  Runtime:
+    Init: 0          # Internal
+    Tty: true
+    Detach: false
+
+  UTS:
+    Enable: true
+    HostName: "tif"
+    DomainName: "local"
+
+  Mount:
+    Enable: true
+    Propagation: 1   # SharedMount
+
+    Mount_vector:
+
+      - Kind: 0      # Proc
+        Target: "/proc"
+        Size: 0
+        Readonly: false
+
+      - Kind: 1      # Sysfs
+        Target: "/sys"
+        Size: 0
+        Readonly: true
+
+      - Kind: 2      # Tmpfs
+        Target: "/tmp"
+        Size: 128
+        Readonly: false
+
+      - Kind: 3      # Bind
+        Target: "/data"
+        Size: 0
+        Readonly: true
+
+  IPC:
+    Enable: true
+
+  User:
+    Enabl: true
+
+    UidMap:
+      ConatainerID: 0
+      HostID: 1000
+      Size: 1
+
+    GidMap:
+      ConatainerID: 0
+      HostID: 1000
+      Size: 1
+
+  Network:
+    Enable: true
+    Mode: 0      # HostNetwork
+
+  Time:
+    Enabl: true
+
+    MonotonicOffset:
+      Hour: 0
+      Minute: 10
+      Second: 0
+
+    BootOffset:
+      Hour: 0
+      Minute: 0
+      Second: 5
+
+  Cgroup:
+    Enable: true
+    Name: "tif"
+    Sddr: "/sys/fs/cgroup/tif"

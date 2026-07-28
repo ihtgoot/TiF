@@ -1,0 +1,75 @@
+contaniner :
+    name:
+    profile : general|reserch (vtune is in general and other option is vtune+profinfer in reserch)
+    Isolation
+
+Isolation :
+    PID      PIDNamespace
+    UTS      UTSNamespace
+    Mount    MountNamespace
+    IPC      IPCNamespace
+    User     UserNamespace
+    Network  NetworkNamespace
+    Time     TimeNamespace
+    Cgroup   CgroupNamespace
+
+PIDNamespace:
+  enabled: true|false
+  mode: private|host
+  mountProc: true|false
+
+runtime:
+  init: internal|tini
+  tty: false|true
+  detach: false|true
+
+UTSNamespace:
+  enabled: true|false
+  hostname: <name>
+  domainname: <name>
+
+MountNamespace:
+  enabled: true|false
+  propagation: shared|slave|unbindable
+  mounts:
+    - type: proc
+      target: /proc
+    - type: sysfs
+      target: /sys
+    - type: tmpfs
+      target: /tmp
+      size: 128M
+    - type: bind
+      source: ./data
+      target: /data
+      readonly: true
+    - type: bind
+      source: /dev/null
+      target: /dev/null
+
+IPCNamespace:
+    enable: true|false
+
+NetworkNamespace:
+  mode: host|none
+
+UserNamespace:
+  enabled: false|true
+  uidMap:
+    - container: <pid>
+      host: <hostpid>
+      size:
+  gidMap:
+    - container: <gid>
+      host: <hostgid>
+      size:
+
+TimeNamespace:
+  enabled: true|false
+  monotonicOffset: <offset>
+  bootOffset: <offset>
+
+CgroupNamespace:
+    enable: true|false
+    name  : <name>
+    addr  : <address>

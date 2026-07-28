@@ -1,0 +1,11 @@
+# generated container files
+Sandboc/container/rootfs/
+Sandboc/Redis/
+Sandboc/testroot/
+
+# OCI images
+Sandboc/*.tar
+Sandboc/*.tar.gz
+Sandboc/redis/
+Sandboc/assets/*/*.tar.gz
+Sandboc/assets/*.tar.gz

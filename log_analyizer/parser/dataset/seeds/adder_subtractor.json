@@ -1,6 +1,6 @@
 {
   "SourceDir": "/home/ihtgoot/project/TiF/log_analyizer/parser/dataset/seeds",
-  "ExitCode": 1,
-  "Log": "%Warning-EOFNEWLINE: /home/ihtgoot/project/TiF/log_analyizer/parser/dataset/seeds/adder_subtractor.json:6:2: Missing newline at end of file (POSIX 3.206).\n                                                                                                           : ... Suggest add newline.\n    6 | }\n      |  ^\n                     ... For warning description see https://verilator.org/warn/EOFNEWLINE?v=5.050\n                     ... Use \"/* verilator lint_off EOFNEWLINE */\" and lint_on around source to disable this message.\n%Error: /home/ihtgoot/project/TiF/log_analyizer/parser/dataset/seeds/adder_subtractor.json:1:1: syntax error, unexpected '{'\n    1 | {\n      | ^\n        ... See the manual at https://verilator.org/verilator_doc.html?v=5.050 for more assistance.\n%Error: Exiting due to 1 error(s), 1 warning(s)\n",
+  "ExitCode": 0,
+  "Log": "- V e r i l a t i o n   R e p o r t: Verilator 5.050 2026-07-01 rev v5.050\n- Verilator: Built from 0.030 MB sources in 2 modules, into 0.015 MB in 3 C++ files needing 0.000 MB\n- Verilator: Walltime 0.011 s (elab=0.001, cvt=0.004, bld=0.000); cpu 0.011 s on 1 threads; allocated 18.379 MB\n",
   "Muation": false
 }
