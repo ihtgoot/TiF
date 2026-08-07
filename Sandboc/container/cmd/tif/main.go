@@ -9,10 +9,12 @@ import (
 	"syscall"
 
 	LandV "github.com/ihtgoot/TiF/Sandboc/container/internal/LoadAndvalidator"
+	"github.com/ihtgoot/TiF/Sandboc/container/internal/config"
 )
 
-// docker run image <cmd> <params>
-// TiF run 			<cmd> <params>
+type InternalConfig struct {
+	userConfig config.Container
+}
 
 func must(err error) {
 	if err != nil {
@@ -20,37 +22,79 @@ func must(err error) {
 	}
 }
 
-//	func main() {
-//		if len(os.Args) < 2 {
-//			fmt.Println("Usage: tif run <cmd> [args...]")
-//			os.Exit(1)
-//		}
-//		switch os.Args[1] {
-//		case "run":
-//			run()
-//		case "child":
-//			child()
-//		default:
-//			panic("bad command")
-//		}
-//	}
 func main() {
-	LandV.Load_Config()
+	fmt.Println("\nMAIN START")
+	fmt.Printf("%#v\n", os.Args)
+	/*
+		 	os.Args
+			0 tif
+			1 run
+			2 /bin/bash
+	*/
+	if len(os.Args) < 2 {
+		fmt.Println("usage: tif run [args...]")
+		os.Exit(1)
+	}
+
+	if os.Args[1] == "child" {
+		fmt.Print("child inside main")
+		var cfg InternalConfig
+
+		addr, err := os.Stat("Tif.yaml")
+		must(err)
+
+		cfg.userConfig, err = LandV.Load_Config(addr)
+		must(err)
+
+		cfg.child()
+		return
+	}
+
+	addr, err := os.Stat("Tif.yaml")
+	must(err)
+	var cfg InternalConfig
+	cfg.userConfig, err = LandV.Load_Config(addr)
+	if err != nil {
+		fmt.Println("fucker you didnot left main and seraching everywhere")
+	}
+	must(err)
+
+	fmt.Printf("parse config : %v\n", cfg)
+
+	Image := cfg.userConfig.Rootfs.Name
+	must(LandV.ExtractImage(Image))
+
+	switch os.Args[1] {
+	case "run":
+		cfg.run()
+	default:
+		panic("bad command")
+	}
 }
 
 // create namesapce
-func run() {
+func (cfg *InternalConfig) run() {
+	fmt.Println("\nRUN START")
+	fmt.Printf("%#v\n", os.Args)
 
-	fmt.Printf("Running %v as %d\n", os.Args[2:], os.Getpid())
+	fmt.Printf("Running %v as %d\n", os.Args[1:], os.Getpid())
 
-	cmd := exec.Command("/proc/self/exe", append([]string{"child"}, os.Args[2:]...)...)
+	fmt.Println("program =", os.Args[1])
+	fmt.Println("argv    =", os.Args[1:])
+
+	cmd := exec.Command("/proc/self/exe", append([]string{"child"}, os.Args[1:]...)...)
 	/*input*/ cmd.Stdin = os.Stdin
 	/*output*/ cmd.Stdout = os.Stdout
 	/*error*/ cmd.Stderr = os.Stderr
 	/*namespace*/
 	/*unix timae sharing ; lest us have out own host name*/
 	hostUID := os.Getuid()
-	cmd.Env = append(os.Environ(), fmt.Sprintf("TIF_HOST_UID=%d", hostUID))
+
+	absRootfs, _ := filepath.Abs("rootfs")
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("TIF_HOST_UID=%d", hostUID),
+		fmt.Sprintf("TIF_ROOTFS=%s", absRootfs),
+	)
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID |
@@ -65,24 +109,30 @@ func run() {
 	}
 
 	err := cmd.Run()
-
-	if rmErr := os.Remove("/sys/fs/cgroup/Sboc"); rmErr != nil {
-		fmt.Println("warning: cgroup cleanup failed:", rmErr)
-	}
-
+	LandV.CleanUP()
 	must(err)
 }
 
-func child() {
+func (cfg *InternalConfig) child() {
+	fmt.Println("\nCihild START")
+	fmt.Printf("%#v\n", os.Args)
 
-	fmt.Printf("Running %v as %d\n", os.Args[2:], os.Getpid())
+	fmt.Println("program =", os.Args[3])
+	fmt.Println("argv    =", os.Args[3:])
+
+	fmt.Printf("Running %v as %d\n", os.Args[3:], os.Getpid())
 	syscall.Sethostname([]byte("boc"))
 
 	cg()
 
 	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, ""))
 
-	must(syscall.Chroot("../../rootfs"))
+	rootfs := os.Getenv("TIF_ROOTFS")
+	if rootfs == "" {
+		rootfs = cfg.userConfig.Rootfs.Address // fallback to config
+	}
+
+	must(syscall.Chroot(rootfs))
 	must(syscall.Chdir("/"))
 
 	must(os.MkdirAll("/proc", 0555))
@@ -99,7 +149,7 @@ func child() {
 		}
 	}()
 
-	cmd := exec.Command(os.Args[2], os.Args[3:]...)
+	cmd := exec.Command(os.Args[3], os.Args[4:]...)
 	/*input*/ cmd.Stdin = os.Stdin
 	/*output*/ cmd.Stdout = os.Stdout
 	/*error*/ cmd.Stderr = os.Stderr
@@ -129,4 +179,10 @@ func cg() {
 		[]byte(strconv.Itoa(os.Getpid())),
 		0644,
 	))
+
 }
+
+/*
+ 127 = command not found
+ 126 = command found but cannot be executed
+*/

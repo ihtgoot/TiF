@@ -2,6 +2,9 @@ Name: "ubuntu-test"
 
 Mode: 1   # 0 = General, 1 = Research
 
+Rootfs:
+  Name: "ubuntu"
+
 Control_vector:
   - true
   - true

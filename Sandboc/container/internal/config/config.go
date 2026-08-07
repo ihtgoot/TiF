@@ -11,6 +11,7 @@ type Container struct {
 	Name           string    `yaml:"Name"`
 	Mode           Profile   `yaml:"Mode"` // 0=general|1=reserch (vtune is in general and other option is vtune+profinfer in reserch)
 	Isolation      Isolation `yaml:"Isolation"`
+	Rootfs         Rootfs    `yaml:"Rootfs"`
 	Control_vector [8]bool   `yaml:"Control_vector"`
 }
 
@@ -24,4 +25,8 @@ type Isolation struct {
 	Network NetworkNamespace `yaml:"Network"`
 	Time    TimeNamespace    `yaml:"Time"`
 	Cgroup  CgroupNamespace  `yaml:"Cgroup"`
+}
+
+type Rootfs struct {
+	Name string `yaml:"Name"`
 }
