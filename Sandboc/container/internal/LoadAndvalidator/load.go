@@ -1,8 +1,10 @@
 package LandV
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
 
 	"github.com/ihtgoot/TiF/Sandboc/container/internal/config"
 	"go.yaml.in/yaml/v3"
@@ -31,5 +33,26 @@ func Load_Config(address os.FileInfo) (config.Container, error) {
 	}
 
 	return cfg, nil
+}
 
+func ExtractImage(image string) error {
+	cmd := exec.Command("bash", "dockerFS.sh", image)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Fatal("script didn not run:", string(output))
+	}
+	log.Printf("script output:\n%s", output)
+	_, err = os.Stat("rootfs")
+
+	return err
+}
+
+func CleanUP() {
+	if rmErr := os.RemoveAll("rootfs"); rmErr != nil {
+		fmt.Println("warnings: temp fs not deleted :\n", rmErr)
+	}
+	if rmErr := os.Remove("/sys/fs/cgroup/Sboc"); rmErr != nil {
+		fmt.Println("warning: cgroup cleanup failed:", rmErr)
+	}
 }

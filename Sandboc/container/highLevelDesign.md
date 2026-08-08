@@ -1,4 +1,4 @@
-                              TiF Platform
+```                            TiF Platform
 ================================================================================
 
                                  Client
@@ -56,11 +56,11 @@
             │              │
             │              │
             ▼              ▼
-    cgroups           perf
-    affinity          eBPF
-    scheduler         VTune
-    resctrl           ProfInfer
-    NUMA              procfs
+       cgroups            perf
+       affinity           eBPF
+      scheduler           VTune
+            |           ProfInfer
+            |             procfs
             │              │
             └──────┬───────┘
                    ▼
@@ -81,3 +81,4 @@
                    │
                    ▼
               PDF Report
+```

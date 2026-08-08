@@ -1,0 +1,1 @@
+42161 : ERROR : Golang profiling is not supported for this analysis configuration. Please try a different analysis type and/or collection mode. 

@@ -28,5 +28,6 @@ type Isolation struct {
 }
 
 type Rootfs struct {
-	Name string `yaml:"Name"`
+	Name    string `yaml:"Name"`
+	Address string
 }
